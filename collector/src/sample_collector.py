@@ -9,6 +9,8 @@ from bleak.backends.device import BLEDevice
 from bleak.backends.scanner import AdvertisementData
 from bleak.backends.characteristic import BleakGATTCharacteristic
 
+from utility import c_base_data_handler_wrapper, c_signal_data_handler_wrapper
+
 # In order to use this script on Linux, you need to bond/pair with the device first.
 # The required BlueZ version is 5.43 or higher.
 # You can use the command `bluetoothctl` to pair with the device.
@@ -53,97 +55,99 @@ def handle_disconnect(_: BleakClient):
     for task in asyncio.all_tasks():
         task.cancel()
 
-def base_data_handler(data):
-    EncodedReceived = " ".join(f"0x{n:02x}" for n in data)
-    print(EncodedReceived)
+# def base_data_handler(data: bytearray):
+#     EncodedReceived = " ".join(f"0x{n:02x}" for n in data)
+#     print(EncodedReceived)
 
-    base_index = 6
+#     base_index = 6
 
-    assert data[base_index+0] == 0xff
-    assert data[base_index+1] == 0xee
+#     assert data[base_index+0] == 0xff
+#     assert data[base_index+1] == 0xee
 
-    data_dict = {
-        'timestamp': data[base_index + 2]<<24|data[base_index + 3]<<16|data[base_index + 4]<<8|data[base_index + 5],
-        'temperature': data[base_index + 6]<<24|data[base_index + 7]<<16|data[base_index + 8]<<8|data[base_index + 9],
-        'heart_rate_estim': data[base_index + 10]<<8|data[base_index + 11],
-        'hr_confidence' : data[base_index + 12],
-        'rr_interbeat_interval': data[base_index + 13]<<8|data[base_index + 14],
-        'rr_confidence' : data[base_index + 15],
-        'r_spo2': data[base_index + 16]<<8|data[base_index + 17],
-        'spo2_confidence': data[base_index + 18],
-        'spo2_estim': data[base_index + 19]<<8|data[base_index + 20],
-        'spo2_calc_percentage': data[base_index + 21],
-        'whrm_suite_curr_opmode': 0,
-        'spo2_low_sign_quality_flag': data[base_index +22] >> 7 & 0x01,
-        'spo2_motion_flag':data[base_index +22] >> 6 & 0x01,
-        'spo2_low_pi_flag': data[base_index +22] >> 5 & 0x01,
-        'spo2_unreliable_r_flag': data[base_index +22] >> 4 & 0x01,
-        'spo2_state': data[base_index +22] & 0x03,
-        'skin_contact_state':data[base_index + 23]&0x02,
-        'activity_class': data[base_index + 23]>>4,
-        'walk_steps':data[base_index + 24]<<24|data[base_index + 25]<<16|data[base_index + 26]<<8|data[base_index + 27],
-        'run_steps': data[base_index + 28]<<24|data[base_index + 29]<<16|data[base_index + 30]<<8|data[base_index + 31],
-        'kcal': data[base_index + 32]<<24|data[base_index + 33]<<16|data[base_index + 34]<<8|data[base_index + 35],
-        'cadence': data[base_index + 36]<<24|data[base_index + 37]<<16|data[base_index + 38]<<8|data[base_index + 39],
-        'event': (data[base_index + 23]>>2) & 0x03,
+#     data_dict = {
+#         'timestamp': data[base_index + 2]<<24|data[base_index + 3]<<16|data[base_index + 4]<<8|data[base_index + 5],
+#         'temperature': data[base_index + 6]<<24|data[base_index + 7]<<16|data[base_index + 8]<<8|data[base_index + 9],
+#         'heart_rate_estim': data[base_index + 10]<<8|data[base_index + 11],
+#         'hr_confidence' : data[base_index + 12],
+#         'rr_interbeat_interval': data[base_index + 13]<<8|data[base_index + 14],
+#         'rr_confidence' : data[base_index + 15],
+#         'r_spo2': data[base_index + 16]<<8|data[base_index + 17],
+#         'spo2_confidence': data[base_index + 18],
+#         'spo2_estim': data[base_index + 19]<<8|data[base_index + 20],
+#         'spo2_calc_percentage': data[base_index + 21],
+#         'whrm_suite_curr_opmode': 0,
+#         'spo2_low_sign_quality_flag': data[base_index +22] >> 7 & 0x01,
+#         'spo2_motion_flag':data[base_index +22] >> 6 & 0x01,
+#         'spo2_low_pi_flag': data[base_index +22] >> 5 & 0x01,
+#         'spo2_unreliable_r_flag': data[base_index +22] >> 4 & 0x01,
+#         'spo2_state': data[base_index +22] & 0x03,
+#         'skin_contact_state':data[base_index + 23]&0x02,
+#         'activity_class': data[base_index + 23]>>4,
+#         'walk_steps':data[base_index + 24]<<24|data[base_index + 25]<<16|data[base_index + 26]<<8|data[base_index + 27],
+#         'run_steps': data[base_index + 28]<<24|data[base_index + 29]<<16|data[base_index + 30]<<8|data[base_index + 31],
+#         'kcal': data[base_index + 32]<<24|data[base_index + 33]<<16|data[base_index + 34]<<8|data[base_index + 35],
+#         'cadence': data[base_index + 36]<<24|data[base_index + 37]<<16|data[base_index + 38]<<8|data[base_index + 39],
+#         'event': (data[base_index + 23]>>2) & 0x03,
 
-        'grn_count': data[base_index + 40] << 16 | data[base_index + 41] << 8 | data[base_index + 42],
-        'irCnt': data[base_index + 43] << 16 | data[base_index + 44] << 8 | data[base_index + 45],
-        'redCnt': data[base_index + 46] << 16 | data[base_index + 47] << 8 | data[base_index + 48],
-        'grn2Cnt': data[base_index + 49] << 16 | data[base_index + 50] << 8 | data[base_index + 51],
+#         'grn_count': data[base_index + 40] << 16 | data[base_index + 41] << 8 | data[base_index + 42],
+#         'irCnt': data[base_index + 43] << 16 | data[base_index + 44] << 8 | data[base_index + 45],
+#         'redCnt': data[base_index + 46] << 16 | data[base_index + 47] << 8 | data[base_index + 48],
+#         'grn2Cnt': data[base_index + 49] << 16 | data[base_index + 50] << 8 | data[base_index + 51],
 
-        'accelx': data[base_index + 52] << 8 | data[base_index + 53],
-        'accely': data[base_index + 54] << 8 | data[base_index + 55],
-        'accelz': data[base_index + 56] << 8 | data[base_index + 57],
+#         'accelx': data[base_index + 52] << 8 | data[base_index + 53],
+#         'accely': data[base_index + 54] << 8 | data[base_index + 55],
+#         'accelz': data[base_index + 56] << 8 | data[base_index + 57],
 
-        'GSR': data[base_index + 58] << 8 | data[base_index + 59]
-    }
+#         'GSR': data[base_index + 58] << 8 | data[base_index + 59]
+#     }
 
-    data_received_tmp.append(data_dict)
+#     data_received_tmp.append(data_dict)
 
-    base_index += 60
-    for _ in range(6):
-        data_dict = {
-            'grn_count': data[base_index + 0]<<16|data[base_index + 1]<<8|data[base_index + 2],
-            'irCnt': data[base_index + 3] << 16 | data[base_index + 4] << 8 | data[base_index + 5],
-            'redCnt': data[base_index + 6] << 16 | data[base_index + 7] << 8 | data[base_index + 8],
-            'grn2Cnt': data[base_index + 9] << 16 | data[base_index + 10] << 8 | data[base_index + 11],
+#     base_index += 60
+#     for _ in range(6):
+#         data_dict = {
+#             'grn_count': data[base_index + 0]<<16|data[base_index + 1]<<8|data[base_index + 2],
+#             'irCnt': data[base_index + 3] << 16 | data[base_index + 4] << 8 | data[base_index + 5],
+#             'redCnt': data[base_index + 6] << 16 | data[base_index + 7] << 8 | data[base_index + 8],
+#             'grn2Cnt': data[base_index + 9] << 16 | data[base_index + 10] << 8 | data[base_index + 11],
 
-            'accelx': data[base_index + 12] << 8 | data[base_index + 13],
-            'accely': data[base_index + 14] << 8 | data[base_index + 15],
-            'accelz': data[base_index + 16] << 8 | data[base_index + 17],
+#             'accelx': data[base_index + 12] << 8 | data[base_index + 13],
+#             'accely': data[base_index + 14] << 8 | data[base_index + 15],
+#             'accelz': data[base_index + 16] << 8 | data[base_index + 17],
 
-            'GSR': data[base_index+18] << 8 | data[base_index+19]
-        }
-        data_received_tmp.append(data_dict)
-        base_index += 20
+#             'GSR': data[base_index+18] << 8 | data[base_index+19]
+#         }
+#         data_received_tmp.append(data_dict)
+#         base_index += 20
 
-def signal_data_handler(data):
-    base_index = 6
-    for _ in range(9):
-        data_dict = {
-            'grn_count': data[base_index + 0] << 16 | data[base_index + 1] << 8 | data[base_index + 2],
-            'irCnt': data[base_index + 3] << 16 | data[base_index + 4] << 8 | data[base_index + 5],
-            'redCnt': data[base_index + 6] << 16 | data[base_index + 7] << 8 | data[base_index + 8],
-            'grn2Cnt': data[base_index + 9] << 16 | data[base_index + 10] << 8 | data[base_index + 11],
+# def signal_data_handler(data: bytearray):
+#     base_index = 6
+#     for _ in range(9):
+#         data_dict = {
+#             'grn_count': data[base_index + 0] << 16 | data[base_index + 1] << 8 | data[base_index + 2],
+#             'irCnt': data[base_index + 3] << 16 | data[base_index + 4] << 8 | data[base_index + 5],
+#             'redCnt': data[base_index + 6] << 16 | data[base_index + 7] << 8 | data[base_index + 8],
+#             'grn2Cnt': data[base_index + 9] << 16 | data[base_index + 10] << 8 | data[base_index + 11],
 
-            'accelx': data[base_index + 12] << 8 | data[base_index + 13],
-            'accely': data[base_index + 14] << 8 | data[base_index + 15],
-            'accelz': data[base_index + 16] << 8 | data[base_index + 17],
+#             'accelx': data[base_index + 12] << 8 | data[base_index + 13],
+#             'accely': data[base_index + 14] << 8 | data[base_index + 15],
+#             'accelz': data[base_index + 16] << 8 | data[base_index + 17],
 
-            'GSR': data[base_index + 18] << 8 | data[base_index + 19]
-        }
-        data_received_tmp.append(data_dict)
-        base_index += 20
+#             'GSR': data[base_index + 18] << 8 | data[base_index + 19]
+#         }
+#         data_received_tmp.append(data_dict)
+#         base_index += 20
 
 
 def data_handler(data):
     global out_counter
+    results = []
     if data[0] == 0x01 and data[1] == 0x90 and len(data) > 42:
-        base_data_handler(data)
+        # base_data_handler(data)
+        results = c_base_data_handler_wrapper(data)
         # data_received_tmp.append(data)
     elif data[0] == 0x01 and data[1] == 0x91 and len(data) > 42:
-        signal_data_handler(data)
+        results = c_signal_data_handler_wrapper(data)
         # data_received_tmp.append(data)
     elif data[0] == 0x01 and data[1] == 0x99 and len(data) == 6:
         # df_live.to_csv("Logs/" + USER_NAME + ".csv", index=0)
@@ -156,11 +160,17 @@ def data_handler(data):
     elif data[0] == 0x01 and data[1] == 0x21 and data[2] == 0x00 and data[3] == 0x01:
         print("Manually stopped data profiling")
         # write data received list to file
-        data_df = pd.DataFrame(data_received_tmp)
-        data_df.to_csv(f"data_received_tmp.csv", index=False)
+        if data_received_tmp:
+            data_df = pd.DataFrame(data_received_tmp)
+            output_filename = "data_received_tmp_c.csv"
+            data_df.to_csv(output_filename, index=False)
+            print(f"Data saved to {output_filename}")
     else:
         DecodedResponse = " ".join(f"0x{n:02x}" for n in data)
         print("received:", out_counter, " >> ", DecodedResponse)
+
+    if results:
+        data_received_tmp.extend(results)
     out_counter += 1
 
 def handle_rx(_: BleakGATTCharacteristic, data: bytearray):
