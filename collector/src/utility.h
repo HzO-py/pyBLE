@@ -39,41 +39,19 @@ typedef struct {
 
 } ParsedData;
 
-typedef struct {
-    uint32_t grn_count;
-    uint32_t ir_cnt;
-    uint32_t red_cnt;
-    uint32_t grn2_cnt;
-    int16_t  accel_x;
-    int16_t  accel_y;
-    int16_t  accel_z;
-    uint16_t gsr;
-} SignalData;
+
+typedef enum {
+    RESULT_DATA_PROCESSED = 0, // Unified success code
+    RESULT_STOP_CMD_RECEIVED = 1,
+    RESULT_TIME_SYNC_PROCESSED = 2,
+    RESULT_PARSING_ERROR = -1,
+    RESULT_INSUFFICIENT_DATA = -2,
+    RESULT_SHORT_DATA_ERROR = -3,
+    RESULT_UNKNOWN_PACKET = -4,
+} HandlerResult;
 
 
-/**
- * @brief Parses a raw byte array from the primary data feed.
- *
- * @param data A pointer to the input byte array.
- * @param data_len The length of the input byte array.
- * @param output_array A pre-allocated array of ParsedData structs.
- * It must be large enough to hold at least 7 structs.
- * @param output_count A pointer to an integer that will be updated with the number of structs written.
- * @return 0 on success, -1 on invalid header, -2 on insufficient data length.
- */
-int base_data_handler(const unsigned char *data, int data_len, ParsedData *output_array, int *output_count);
-
-/**
- * @brief Parses a raw byte array from the signal data feed.
- *
- * @param data A pointer to the input byte array.
- * @param data_len The length of the input byte array.
- * @param output_array A pre-allocated array of SignalData structs to be filled.
- * It must be large enough to hold at least 9 structs.
- * @param output_count A pointer to an integer that will be updated with the number of structs written.
- * @return 0 on success, -2 on insufficient data length.
- */
-int signal_data_handler(const unsigned char *data, int data_len, SignalData *output_array, int *output_count);
+HandlerResult data_handler(const unsigned char *data, int data_len, ParsedData *output_array, int *output_count);
 
 
 #endif

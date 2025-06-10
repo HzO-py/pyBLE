@@ -1,126 +1,76 @@
 import ctypes
 import os
 import sys
+from enum import IntEnum
 
 class ParsedData(ctypes.Structure):
     _fields_ = [
-        ("timestamp", ctypes.c_uint32),
-        ("temperature", ctypes.c_int32),
-        ("heart_rate_estim", ctypes.c_uint16),
-        ("hr_confidence", ctypes.c_uint8),
-        ("rr_interbeat_interval", ctypes.c_uint16),
-        ("rr_confidence", ctypes.c_uint8),
-        ("r_spo2", ctypes.c_uint16),
-        ("spo2_confidence", ctypes.c_uint8),
-        ("spo2_estim", ctypes.c_uint16),
-        ("spo2_calc_percentage", ctypes.c_uint8),
-        ("whrm_suite_curr_opmode", ctypes.c_uint8),
-        ("spo2_low_sign_quality_flag", ctypes.c_uint8),
-        ("spo2_motion_flag", ctypes.c_uint8),
-        ("spo2_low_pi_flag", ctypes.c_uint8),
-        ("spo2_unreliable_r_flag", ctypes.c_uint8),
-        ("spo2_state", ctypes.c_uint8),
-        ("skin_contact_state", ctypes.c_uint8),
-        ("activity_class", ctypes.c_uint8),
-        ("walk_steps", ctypes.c_uint32),
-        ("run_steps", ctypes.c_uint32),
-        ("kcal", ctypes.c_uint32),
-        ("cadence", ctypes.c_uint32),
-        ("event", ctypes.c_uint8),
-        ("grn_count", ctypes.c_uint32),
-        ("ir_cnt", ctypes.c_uint32),
-        ("red_cnt", ctypes.c_uint32),
-        ("grn2_cnt", ctypes.c_uint32),
-        ("accel_x", ctypes.c_int16),
-        ("accel_y", ctypes.c_int16),
-        ("accel_z", ctypes.c_int16),
-        ("gsr", ctypes.c_uint16),
+        ("timestamp", ctypes.c_int32), ("temperature", ctypes.c_int32),
+        ("heart_rate_estim", ctypes.c_int16), ("hr_confidence", ctypes.c_int8),
+        ("rr_interbeat_interval", ctypes.c_int16), ("rr_confidence", ctypes.c_int8),
+        ("r_spo2", ctypes.c_int16), ("spo2_confidence", ctypes.c_int8),
+        ("spo2_estim", ctypes.c_int16), ("spo2_calc_percentage", ctypes.c_int8),
+        ("whrm_suite_curr_opmode", ctypes.c_int8), ("spo2_low_sign_quality_flag", ctypes.c_int8),
+        ("spo2_motion_flag", ctypes.c_int8), ("spo2_low_pi_flag", ctypes.c_int8),
+        ("spo2_unreliable_r_flag", ctypes.c_int8), ("spo2_state", ctypes.c_int8),
+        ("skin_contact_state", ctypes.c_int8), ("activity_class", ctypes.c_int8),
+        ("walk_steps", ctypes.c_int32), ("run_steps", ctypes.c_int32),
+        ("kcal", ctypes.c_int32), ("cadence", ctypes.c_int32),
+        ("event", ctypes.c_int8), ("grn_count", ctypes.c_int32),
+        ("ir_cnt", ctypes.c_int32), ("red_cnt", ctypes.c_int32),
+        ("grn2_cnt", ctypes.c_int32), ("accel_x", ctypes.c_int16),
+        ("accel_y", ctypes.c_int16), ("accel_z", ctypes.c_int16),
+        ("gsr", ctypes.c_int16),
     ]
 
-class SignalData(ctypes.Structure):
-    _fields_ = [
-        ("grn_count", ctypes.c_uint32),
-        ("ir_cnt", ctypes.c_uint32),
-        ("red_cnt", ctypes.c_uint32),
-        ("grn2_cnt", ctypes.c_uint32),
-        ("accel_x", ctypes.c_int16),
-        ("accel_y", ctypes.c_int16),
-        ("accel_z", ctypes.c_int16),
-        ("gsr", ctypes.c_uint16),
-    ]
+class HandlerResult(IntEnum):
+    RESULT_DATA_PROCESSED = 0
+    RESULT_STOP_CMD_RECEIVED = 1
+    RESULT_TIME_SYNC_PROCESSED = 2
+    RESULT_PARSING_ERROR = -1
+    RESULT_INSUFFICIENT_DATA = -2
+    RESULT_SHORT_DATA_ERROR = -3
+    RESULT_UNKNOWN_PACKET = -4
 
-def load_utility_library():
-    LIB_NAME = 'utility.so' if sys.platform != 'win32' else 'utility.dll'
-
+def load_and_setup():
+    LIB_NAME = 'utility.so'
+    if sys.platform.startswith('win'):
+        LIB_NAME = 'utility.dll'
     try:
         lib_path = os.path.join(os.path.dirname(__file__), 'output', LIB_NAME)
-        return ctypes.CDLL(lib_path)
+        lib = ctypes.CDLL(lib_path)
     except OSError as e:
-        print(f"Error: Could not load the shared library from '{lib_path}'")
-        print("Please make sure you have run 'make' to compile the C code.")
-        print(f"Details: {e}")
+        print(f"Error: Could not load shared library from '{lib_path}'", file=sys.stderr)
         sys.exit(1)
 
-utility_lib = load_utility_library()
-
-def setup_prototypes():
-    utility_lib.base_data_handler.argtypes = [
-        ctypes.POINTER(ctypes.c_ubyte),
-        ctypes.c_int,
-        ctypes.POINTER(ParsedData),
-        ctypes.POINTER(ctypes.c_int)
+    lib.data_handler.argtypes = [
+        ctypes.POINTER(ctypes.c_ubyte), ctypes.c_int,
+        ctypes.c_void_p, ctypes.POINTER(ctypes.c_int)
     ]
-    utility_lib.base_data_handler.restype = ctypes.c_int
+    lib.data_handler.restype = ctypes.c_int
+    return lib
 
-    utility_lib.signal_data_handler.argtypes = [
-        ctypes.POINTER(ctypes.c_ubyte),
-        ctypes.c_int,
-        ctypes.POINTER(SignalData),
-        ctypes.POINTER(ctypes.c_int)
-    ]
-    utility_lib.signal_data_handler.restype = ctypes.c_int
+utility_lib = load_and_setup()
 
-setup_prototypes()
-
-def c_base_data_handler_wrapper(data: bytearray):
+def c_data_handler_wrapper(data: bytearray):
     data_len = len(data)
     c_data_buffer = (ctypes.c_ubyte * data_len).from_buffer(data)
-    output_array_type = ParsedData * 7
-    output_array = output_array_type()
+    
+    MAX_RECORDS = 9
+    output_buffer = (ParsedData * MAX_RECORDS)()
     output_count = ctypes.c_int(0)
 
-    ret = utility_lib.base_data_handler(c_data_buffer, data_len, output_array, ctypes.byref(output_count))
-
+    ret_code = utility_lib.data_handler(
+        c_data_buffer, data_len, 
+        ctypes.byref(output_buffer), ctypes.byref(output_count)
+    )
+    
+    status = HandlerResult(ret_code)
     results = []
-    if ret == 0:
-        print(f"C base_data_handler processed {output_count.value} records.")
+
+    if status == HandlerResult.RESULT_DATA_PROCESSED:
         for i in range(output_count.value):
-            data_dict = {field_def[0]: getattr(output_array[i], field_def[0]) for field_def in ParsedData._fields_}
+            data_dict = {field[0]: getattr(output_buffer[i], field[0]) for field in ParsedData._fields_}
             results.append(data_dict)
-    else:
-        print(f"C base_data_handler returned an error: {ret}")
-    return results
-
-
-def c_signal_data_handler_wrapper(data: bytearray):
-    """
-    Python wrapper for the C signal_data_handler function.
-    Takes a bytearray and returns a list of dictionaries.
-    """
-    data_len = len(data)
-    c_data_buffer = (ctypes.c_ubyte * data_len).from_buffer(data)
-    output_array_type = SignalData * 9
-    output_array = output_array_type()
-    output_count = ctypes.c_int(0)
-
-    ret = utility_lib.signal_data_handler(c_data_buffer, data_len, output_array, ctypes.byref(output_count))
-
-    results = []
-    if ret == 0:
-        print(f"C signal_data_handler processed {output_count.value} records.")
-        for i in range(output_count.value):
-            data_dict = {field_def[0]: getattr(output_array[i], field_def[0]) for field_def in SignalData._fields_}
-            results.append(data_dict)
-    else:
-        print(f"C signal_data_handler returned an error: {ret}")
-    return results
+            
+    return status, results
