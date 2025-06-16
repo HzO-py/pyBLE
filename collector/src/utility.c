@@ -1,11 +1,92 @@
 #include "utility.h"
 #include <stdio.h>
 #include <string.h>
+#include <stdint.h>
+#include <stdbool.h>
 
 
 int base_data_handler(const unsigned char *data, int data_len, ParsedData *output_array, int *output_count);
 int signal_data_handler(const unsigned char *data, int data_len, ParsedData *output_array, int *output_count);
 
+
+static uint16_t encryption_weights[5] = {0x1234, 0xABCD, 0x1F1F, 0x0F0F, 0xAAAA};
+
+// Feistel encryption key
+static uint32_t encryption_key = 0xDEADBEEF;
+
+// Simple PRNG (xorshift) to shuffle with key as seed
+uint32_t xorshift32(uint32_t *state) {
+    uint32_t x = *state;
+    x ^= x << 13;
+    x ^= x >> 17;
+    x ^= x << 5;
+    *state = x;
+    return x;
+}
+
+// Initialize S-box with key as seed
+void init_sbox(uint8_t sbox[256], uint32_t key) {
+    for (int i = 0; i < 256; i++)
+        sbox[i] = i;
+
+    uint32_t state = key;
+    for (int i = 255; i > 0; i--) {
+        uint32_t r = xorshift32(&state) % (i + 1);
+        uint8_t tmp = sbox[i];
+        sbox[i] = sbox[r];
+        sbox[r] = tmp;
+    }
+}
+
+// Round function F using S-box and round key
+uint8_t feistel_round(uint8_t half, uint8_t round_key, uint8_t sbox[256]) {
+    return sbox[half ^ round_key];
+}
+
+// Encrypt 16-bit value with 4-round Feistel cipher
+uint16_t feistel_encrypt_16bit(uint16_t value, uint32_t master_key) {
+    uint8_t sbox[256];
+    init_sbox(sbox, master_key);
+
+    uint8_t round_keys[4];
+    uint32_t rk_state = master_key;
+    for (int i = 0; i < 4; i++)
+        round_keys[i] = xorshift32(&rk_state) & 0xFF;
+
+    uint8_t L = (value >> 8) & 0xFF;
+    uint8_t R = value & 0xFF;
+
+    for (uint8_t i = 0; i < 4; i++) {
+        uint8_t temp = R;
+        R = L ^ feistel_round(R, round_keys[i], sbox);
+        L = temp;
+    }
+
+    return ((uint16_t)L << 8) | R;
+}
+
+// Compute weighted checksum of data (2 bytes at a time), result is 16-bit
+uint16_t weighted_checksum_16bit(const uint8_t *data, size_t len, const uint16_t *weights, size_t num_weights) {
+    uint32_t sum = 0;
+
+    for (size_t i = 0; i + 1 < len; i += 2) {
+        uint16_t word = ((uint16_t)data[i] << 8) | data[i + 1];
+        sum += word * weights[(i / 2) % num_weights];
+    }
+
+    return (uint16_t)(sum & 0xFFFF);  // return lower 16 bits
+}
+
+bool encryption_check(const uint8_t *data, uint8_t input_low_byte, uint8_t input_high_byte) {
+    uint16_t encrypted_checksum = feistel_encrypt_16bit(weighted_checksum_16bit(data, 180, encryption_weights, 5), encryption_key);
+    uint8_t low_byte = encrypted_checksum & 0xFF;
+    uint8_t high_byte = (encrypted_checksum >> 8) & 0xFF;
+    if (low_byte != input_low_byte || high_byte != input_high_byte) {
+        printf("Encryption check failed: expected %02X%02X, got %02X%02X\n", high_byte, low_byte, input_high_byte, input_low_byte);
+        return false;
+    }
+    return true; // Placeholder for actual encryption check logic
+}
 
 int data_handler(const unsigned char *data, int data_len, ParsedData *output_array, int *output_count) {
     *output_count = 0; // Initialize output count to 0
@@ -25,10 +106,22 @@ int data_handler(const unsigned char *data, int data_len, ParsedData *output_arr
 
 
     if (data[0] == 0x01 && data[1] == 0x90) {
-        return (HandlerResult)base_data_handler(data, data_len, (ParsedData*)output_array, output_count);
+        if (encryption_check(&data[6], data[5], data[4])) {
+            // Encryption check passed, proceed with data handling
+            return (HandlerResult)base_data_handler(data, data_len, (ParsedData*)output_array, output_count);
+        } else {
+            printf("C Handler: Encryption check failed\n");
+            return RESULT_PARSING_ERROR; // -1
+        }
     }
     if (data[0] == 0x01 && data[1] == 0x91) {
-        return (HandlerResult)signal_data_handler(data, data_len, (ParsedData*)output_array, output_count);
+        if (encryption_check(&data[6], data[5], data[4])) {
+            // Encryption check passed, proceed with signal data handling
+            return (HandlerResult)signal_data_handler(data, data_len, (ParsedData*)output_array, output_count);
+        } else {
+            printf("C Handler: Encryption check failed\n");
+            return RESULT_PARSING_ERROR; // -1
+        }
     }
     
     printf("C Handler: Unknown packet received\n");

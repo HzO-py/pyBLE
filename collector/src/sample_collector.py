@@ -31,7 +31,8 @@ UART_SERVICE_UUID = "2a3b580a-7263-4249-a647-e0af6f5966ab"
 UART_RX_CHAR_UUID = "2a3b580b-7263-4249-a647-e0af6f5966ab"
 UART_TX_CHAR_UUID = "2a3b580c-7263-4249-a647-e0af6f5966ab"
 
-BLEName = "We-Be 22f7"
+# BLEName = "We-Be 22f7"
+BLEName = "We-Be 3d97"
 
 total_bytes = 0
 # SentCommand = False
