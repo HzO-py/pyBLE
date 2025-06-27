@@ -1,2 +1,4 @@
 .history/
 .vscode/
+.collector/data/
+.collector/src/
